@@ -1,0 +1,20 @@
+# Build artifacts
+build/
+managed_components/
+dependencies.lock
+sdkconfig
+sdkconfig.old
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code local settings
+.claude/
+
+# Local dev environment
+.direnv/
+.envrc
+.python-version
