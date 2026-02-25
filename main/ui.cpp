@@ -1,23 +1,34 @@
 #include "ui.hpp"
-#include "esp32_8048s043.hpp"
 
+#include "lvgl.h"
+
+#include <array>
 #include <cstdio>
 #include <string>
 
-/* ── Colour palette ──────────────────────────────────────────────────── */
+/* ── Design tokens ───────────────────────────────────────────────────── */
 
-namespace colour {
-const auto kBg      = lv_color_hex(0x1E1E2E);  // dark background
-const auto kCard    = lv_color_hex(0x313244);   // card surface
-const auto kText    = lv_color_hex(0xCDD6F4);   // primary text
-const auto kLabel   = lv_color_hex(0xA6ADC8);   // secondary text
+namespace tokens {
+// Colours
+const auto kBg      = lv_color_hex(0x1E1E2E);   // dark background
+const auto kSurface = lv_color_hex(0x313244);    // card surface
+const auto kText    = lv_color_hex(0xCDD6F4);    // primary text
+const auto kMuted   = lv_color_hex(0xA6ADC8);    // secondary text
+const auto kGood    = lv_color_hex(0x1B5E20);    // dark green
+const auto kMod     = lv_color_hex(0x7B6C00);    // dark yellow
+const auto kUsg     = lv_color_hex(0xBF360C);    // dark orange
+const auto kUnhlt   = lv_color_hex(0xB71C1C);    // dark red
 
-// AQI-style severity backgrounds (dark, saturated for white text)
-const auto kGood    = lv_color_hex(0x1B5E20);   // dark green
-const auto kMod     = lv_color_hex(0x7B6C00);   // dark yellow
-const auto kUsg     = lv_color_hex(0xBF360C);   // dark orange
-const auto kUnhlt   = lv_color_hex(0xB71C1C);   // dark red
-} // namespace colour
+// Typography
+constexpr const lv_font_t* kFontXl = &lv_font_montserrat_48;
+constexpr const lv_font_t* kFontLg = &lv_font_montserrat_36;
+constexpr const lv_font_t* kFontMd = &lv_font_montserrat_20;
+constexpr const lv_font_t* kFontSm = &lv_font_montserrat_14;
+
+// Spacing
+constexpr int32_t kPad    = 8;
+constexpr int32_t kRadius = 12;
+} // namespace tokens
 
 /* ── Card metadata ───────────────────────────────────────────────────── */
 
@@ -37,141 +48,221 @@ static constexpr std::array<CardMeta, 8> kCards = {{
     {"NOx",    "index"},
 }};
 
-/* ── Per-metric colour helpers ───────────────────────────────────────── */
+/* ── Shared styles ───────────────────────────────────────────────────── */
 
-// Returns green/yellow/orange/red based on value and metric index
-static lv_color_t MetricColor(size_t index, float v)
+static lv_style_t style_card;
+static lv_style_t style_title;
+static lv_style_t style_value;
+static lv_style_t style_secondary;
+static lv_style_t style_status;
+
+// Severity styles — only override bg_color, layered on top of style_card
+static lv_style_t style_good;
+static lv_style_t style_mod;
+static lv_style_t style_usg;
+static lv_style_t style_unhlt;
+
+static constexpr size_t kSeverityCount = 4;
+static lv_style_t* const kSeverityStyles[kSeverityCount] = {
+    &style_good, &style_mod, &style_usg, &style_unhlt,
+};
+
+static void InitStyles()
+{
+    // Card container
+    lv_style_init(&style_card);
+    lv_style_set_bg_color(&style_card, tokens::kSurface);
+    lv_style_set_bg_opa(&style_card, LV_OPA_COVER);
+    lv_style_set_radius(&style_card, tokens::kRadius);
+    lv_style_set_pad_all(&style_card, 4);
+    lv_style_set_pad_row(&style_card, 2);
+    lv_style_set_border_width(&style_card, 0);
+
+    // Title label
+    lv_style_init(&style_title);
+    lv_style_set_text_font(&style_title, tokens::kFontLg);
+    lv_style_set_text_color(&style_title, tokens::kText);
+
+    // Value label (big number)
+    lv_style_init(&style_value);
+    lv_style_set_text_font(&style_value, tokens::kFontXl);
+    lv_style_set_text_color(&style_value, tokens::kText);
+
+    // Secondary label (name, unit)
+    lv_style_init(&style_secondary);
+    lv_style_set_text_font(&style_secondary, tokens::kFontMd);
+    lv_style_set_text_color(&style_secondary, tokens::kMuted);
+
+    // Status label
+    lv_style_init(&style_status);
+    lv_style_set_text_font(&style_status, tokens::kFontSm);
+    lv_style_set_text_color(&style_status, tokens::kMuted);
+
+    // Severity backgrounds
+    lv_style_init(&style_good);
+    lv_style_set_bg_color(&style_good, tokens::kGood);
+
+    lv_style_init(&style_mod);
+    lv_style_set_bg_color(&style_mod, tokens::kMod);
+
+    lv_style_init(&style_usg);
+    lv_style_set_bg_color(&style_usg, tokens::kUsg);
+
+    lv_style_init(&style_unhlt);
+    lv_style_set_bg_color(&style_unhlt, tokens::kUnhlt);
+}
+
+/* ── Per-metric severity ─────────────────────────────────────────────── */
+
+// Returns severity level 0–3 (good / moderate / unhealthy-sensitive / unhealthy)
+static size_t MetricSeverity(size_t index, float v)
 {
     switch (index) {
     case 0: // PM 1.0 (µg/m³)
-        if (v <= 12.f)  return colour::kGood;
-        if (v <= 35.f)  return colour::kMod;
-        if (v <= 55.f)  return colour::kUsg;
-        return colour::kUnhlt;
+        if (v <= 12.f)  return 0;
+        if (v <= 35.f)  return 1;
+        if (v <= 55.f)  return 2;
+        return 3;
     case 1: // PM 2.5 (µg/m³, US EPA)
-        if (v <= 12.f)  return colour::kGood;
-        if (v <= 35.4f) return colour::kMod;
-        if (v <= 55.4f) return colour::kUsg;
-        return colour::kUnhlt;
+        if (v <= 12.f)  return 0;
+        if (v <= 35.4f) return 1;
+        if (v <= 55.4f) return 2;
+        return 3;
     case 2: // PM 4.0 (µg/m³)
-        if (v <= 25.f)  return colour::kGood;
-        if (v <= 50.f)  return colour::kMod;
-        if (v <= 75.f)  return colour::kUsg;
-        return colour::kUnhlt;
+        if (v <= 25.f)  return 0;
+        if (v <= 50.f)  return 1;
+        if (v <= 75.f)  return 2;
+        return 3;
     case 3: // PM 10 (µg/m³, US EPA)
-        if (v <= 54.f)  return colour::kGood;
-        if (v <= 154.f) return colour::kMod;
-        if (v <= 254.f) return colour::kUsg;
-        return colour::kUnhlt;
+        if (v <= 54.f)  return 0;
+        if (v <= 154.f) return 1;
+        if (v <= 254.f) return 2;
+        return 3;
     case 4: // Temperature (°C) — comfort range
-        if (v >= 18.f && v <= 24.f) return colour::kGood;
-        if (v >= 15.f && v <= 28.f) return colour::kMod;
-        if (v >= 10.f && v <= 32.f) return colour::kUsg;
-        return colour::kUnhlt;
+        if (v >= 18.f && v <= 24.f) return 0;
+        if (v >= 15.f && v <= 28.f) return 1;
+        if (v >= 10.f && v <= 32.f) return 2;
+        return 3;
     case 5: // Humidity (%RH) — comfort range
-        if (v >= 30.f && v <= 60.f) return colour::kGood;
-        if (v >= 20.f && v <= 70.f) return colour::kMod;
-        if (v >= 10.f && v <= 80.f) return colour::kUsg;
-        return colour::kUnhlt;
+        if (v >= 30.f && v <= 60.f) return 0;
+        if (v >= 20.f && v <= 70.f) return 1;
+        if (v >= 10.f && v <= 80.f) return 2;
+        return 3;
     case 6: // VOC index (Sensirion 1–500)
-        if (v <= 150.f) return colour::kGood;
-        if (v <= 250.f) return colour::kMod;
-        if (v <= 400.f) return colour::kUsg;
-        return colour::kUnhlt;
+        if (v <= 150.f) return 0;
+        if (v <= 250.f) return 1;
+        if (v <= 400.f) return 2;
+        return 3;
     case 7: // NOx index (Sensirion 1–500)
-        if (v <= 20.f)  return colour::kGood;
-        if (v <= 150.f) return colour::kMod;
-        if (v <= 250.f) return colour::kUsg;
-        return colour::kUnhlt;
+        if (v <= 20.f)  return 0;
+        if (v <= 150.f) return 1;
+        if (v <= 250.f) return 2;
+        return 3;
     default:
-        return colour::kText;
+        return 0;
     }
 }
 
-/* ── Ui implementation ───────────────────────────────────────────────── */
+/* ── Grid layout ─────────────────────────────────────────────────────── */
 
-Ui::Card Ui::MakeCard(lv_obj_t* parent, size_t index)
+static constexpr int32_t kColDsc[] = {
+    LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
+    LV_GRID_TEMPLATE_LAST,
+};
+
+// Row 0: title (content-sized), rows 1–2: cards (equal), row 3: status
+static constexpr int32_t kRowDsc[] = {
+    LV_GRID_CONTENT,
+    LV_GRID_FR(1), LV_GRID_FR(1),
+    LV_GRID_CONTENT,
+    LV_GRID_TEMPLATE_LAST,
+};
+
+/* ── Ui::Impl ────────────────────────────────────────────────────────── */
+
+struct Ui::Impl {
+    static constexpr size_t kCardCount = 8;
+
+    struct Card {
+        lv_obj_t* container{};
+        lv_obj_t* value_label{};
+    };
+
+    std::array<Card, kCardCount> cards{};
+    lv_obj_t* status_label{};
+
+    static Card MakeCard(lv_obj_t* parent, size_t index)
+    {
+        Card c;
+        const auto& meta = kCards[index];
+
+        c.container = lv_obj_create(parent);
+        lv_obj_add_style(c.container, &style_card, 0);
+        lv_obj_set_flex_flow(c.container, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(c.container, LV_FLEX_ALIGN_CENTER,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(c.container, LV_OBJ_FLAG_SCROLLABLE);
+
+        auto* name = lv_label_create(c.container);
+        lv_label_set_text(name, meta.name);
+        lv_obj_add_style(name, &style_secondary, 0);
+
+        c.value_label = lv_label_create(c.container);
+        lv_label_set_text(c.value_label, "--");
+        lv_obj_add_style(c.value_label, &style_value, 0);
+
+        auto* unit = lv_label_create(c.container);
+        lv_label_set_text(unit, meta.unit);
+        lv_obj_add_style(unit, &style_secondary, 0);
+
+        return c;
+    }
+};
+
+/* ── Ui public methods ───────────────────────────────────────────────── */
+
+Ui::Ui() : impl_(std::make_unique<Impl>())
 {
-    Card c;
-    const auto& meta = kCards[index];
+    InitStyles();
 
-    c.container = lv_obj_create(parent);
-    lv_obj_set_flex_flow(c.container, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(c.container, LV_FLEX_ALIGN_CENTER,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_flex_grow(c.container, 1);
-    lv_obj_set_height(c.container, LV_PCT(100));
-    lv_obj_set_style_bg_color(c.container, colour::kCard, 0);
-    lv_obj_set_style_bg_opa(c.container, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(c.container, 12, 0);
-    lv_obj_set_style_pad_all(c.container, 4, 0);
-    lv_obj_set_style_pad_row(c.container, 2, 0);
-    lv_obj_set_style_border_width(c.container, 0, 0);
-    lv_obj_clear_flag(c.container, LV_OBJ_FLAG_SCROLLABLE);
-
-    c.name_label = lv_label_create(c.container);
-    lv_label_set_text(c.name_label, meta.name);
-    lv_obj_set_style_text_font(c.name_label, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_color(c.name_label, colour::kLabel, 0);
-
-    c.value_label = lv_label_create(c.container);
-    lv_label_set_text(c.value_label, "--");
-    lv_obj_set_style_text_font(c.value_label, &lv_font_montserrat_48, 0);
-    lv_obj_set_style_text_color(c.value_label, colour::kText, 0);
-
-    c.unit_label = lv_label_create(c.container);
-    lv_label_set_text(c.unit_label, meta.unit);
-    lv_obj_set_style_text_font(c.unit_label, &lv_font_montserrat_20, 0);
-    lv_obj_set_style_text_color(c.unit_label, colour::kLabel, 0);
-
-    return c;
-}
-
-Ui::Ui()
-{
     auto* scr = lv_screen_active();
-    lv_obj_set_style_bg_color(scr, colour::kBg, 0);
+    lv_obj_set_style_bg_color(scr, tokens::kBg, 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
-    lv_obj_set_style_pad_all(scr, kPad, 0);
+    lv_obj_set_style_pad_all(scr, tokens::kPad, 0);
     lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_set_flex_flow(scr, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(scr, LV_FLEX_ALIGN_START,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_row(scr, kPad, 0);
+    // Grid layout: 4 columns, 4 rows (title, cards, cards, status)
+    lv_obj_set_layout(scr, LV_LAYOUT_GRID);
+    lv_obj_set_grid_dsc_array(scr, kColDsc, kRowDsc);
+    lv_obj_set_style_pad_row(scr, tokens::kPad, 0);
+    lv_obj_set_style_pad_column(scr, tokens::kPad, 0);
 
-    /* Title */
+    // Title — spans all 4 columns
     auto* title = lv_label_create(scr);
     lv_label_set_text(title, "Air Quality Monitor");
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_36, 0);
-    lv_obj_set_style_text_color(title, colour::kText, 0);
+    lv_obj_add_style(title, &style_title, 0);
+    lv_obj_set_grid_cell(title,
+        LV_GRID_ALIGN_CENTER, 0, 4,
+        LV_GRID_ALIGN_CENTER, 0, 1);
 
-    /* Card rows */
-    for (int row = 0; row < kRows; ++row) {
-        auto* row_obj = lv_obj_create(scr);
-        lv_obj_set_width(row_obj, LV_PCT(100));
-        lv_obj_set_flex_grow(row_obj, 1);
-        lv_obj_set_flex_flow(row_obj, LV_FLEX_FLOW_ROW);
-        lv_obj_set_flex_align(row_obj, LV_FLEX_ALIGN_SPACE_EVENLY,
-                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_set_style_pad_column(row_obj, kPad, 0);
-        lv_obj_set_style_pad_all(row_obj, 0, 0);
-        lv_obj_set_style_bg_opa(row_obj, LV_OPA_TRANSP, 0);
-        lv_obj_set_style_border_width(row_obj, 0, 0);
-        lv_obj_clear_flag(row_obj, LV_OBJ_FLAG_SCROLLABLE);
-
-        for (int col = 0; col < kCols; ++col) {
-            auto idx = static_cast<size_t>(row * kCols + col);
-            cards_[idx] = MakeCard(row_obj, idx);
-        }
+    // Cards — placed directly on the grid, no intermediate row objects
+    for (size_t i = 0; i < Impl::kCardCount; ++i) {
+        impl_->cards[i] = Impl::MakeCard(scr, i);
+        lv_obj_set_grid_cell(impl_->cards[i].container,
+            LV_GRID_ALIGN_STRETCH, static_cast<int32_t>(i % 4), 1,
+            LV_GRID_ALIGN_STRETCH, static_cast<int32_t>(1 + i / 4), 1);
     }
 
-    /* Status line */
-    status_label_ = lv_label_create(scr);
-    lv_label_set_text(status_label_, "Waiting for first reading...");
-    lv_obj_set_style_text_font(status_label_, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(status_label_, colour::kLabel, 0);
+    // Status — spans all 4 columns
+    impl_->status_label = lv_label_create(scr);
+    lv_label_set_text(impl_->status_label, "Waiting for first reading...");
+    lv_obj_add_style(impl_->status_label, &style_status, 0);
+    lv_obj_set_grid_cell(impl_->status_label,
+        LV_GRID_ALIGN_CENTER, 0, 4,
+        LV_GRID_ALIGN_CENTER, 3, 1);
 }
+
+Ui::~Ui() = default;
 
 void Ui::UpdateMeasurements(const Sen55::Measurement& data)
 {
@@ -180,8 +271,7 @@ void Ui::UpdateMeasurements(const Sen55::Measurement& data)
         data.temperature, data.humidity, data.voc_index, data.nox_index,
     };
 
-    for (size_t i = 0; i < kCardCount; ++i) {
-        // PM and environmental values get 1 decimal; indices get none
+    for (size_t i = 0; i < Impl::kCardCount; ++i) {
         auto text = (i >= 6)
             ? std::to_string(static_cast<int>(values[i]))
             : ([&] {
@@ -189,16 +279,19 @@ void Ui::UpdateMeasurements(const Sen55::Measurement& data)
                 std::snprintf(buf, sizeof(buf), "%.1f", values[i]);
                 return std::string(buf);
             })();
-        lv_label_set_text(cards_[i].value_label, text.c_str());
+        lv_label_set_text(impl_->cards[i].value_label, text.c_str());
 
-        // Set card background by severity; keep value text white
-        lv_obj_set_style_bg_color(cards_[i].container,
-                                  MetricColor(i, values[i]), 0);
+        // Swap severity style (like toggling CSS classes)
+        for (auto* sev : kSeverityStyles) {
+            lv_obj_remove_style(impl_->cards[i].container, sev, 0);
+        }
+        auto level = MetricSeverity(i, values[i]);
+        lv_obj_add_style(impl_->cards[i].container,
+                         kSeverityStyles[level], 0);
     }
 }
 
 void Ui::SetStatus(std::string_view text)
 {
-    // lv_label_set_text copies internally, so the view is safe here
-    lv_label_set_text(status_label_, std::string(text).c_str());
+    lv_label_set_text(impl_->status_label, std::string(text).c_str());
 }
