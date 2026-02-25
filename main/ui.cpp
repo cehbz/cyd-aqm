@@ -11,7 +11,6 @@ const auto bg      = lv_color_hex(0x1E1E2E);  // dark background
 const auto card    = lv_color_hex(0x313244);   // card surface
 const auto text    = lv_color_hex(0xCDD6F4);   // primary text
 const auto label   = lv_color_hex(0xA6ADC8);   // secondary text
-const auto accent  = lv_color_hex(0x89B4FA);   // button
 
 // PM2.5 AQI thresholds (US EPA breakpoints)
 const auto good    = lv_color_hex(0xA6E3A1);   // 0–12   µg/m³
@@ -46,14 +45,6 @@ lv_color_t Ui::pm25_color(float pm25)
     if (pm25 <= 35.4f)  return colour::mod;
     if (pm25 <= 55.4f)  return colour::usg;
     return colour::unhlt;
-}
-
-void Ui::refresh_trampoline(lv_event_t* e)
-{
-    auto* self = static_cast<Ui*>(lv_event_get_user_data(e));
-    if (self->refresh_cb_) {
-        self->refresh_cb_();
-    }
 }
 
 Ui::Card Ui::make_card(lv_obj_t* parent, size_t index)
@@ -128,32 +119,11 @@ Ui::Ui()
         }
     }
 
-    /* Status bar */
-    auto* status_bar = lv_obj_create(scr);
-    lv_obj_set_width(status_bar, LV_PCT(100));
-    lv_obj_set_height(status_bar, kStatusHeight);
-    lv_obj_set_flex_flow(status_bar, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(status_bar, LV_FLEX_ALIGN_SPACE_BETWEEN,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_bg_opa(status_bar, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(status_bar, 0, 0);
-    lv_obj_set_style_pad_all(status_bar, 0, 0);
-
-    status_label_ = lv_label_create(status_bar);
+    /* Status line */
+    status_label_ = lv_label_create(scr);
     lv_label_set_text(status_label_, "Waiting for first reading...");
     lv_obj_set_style_text_font(status_label_, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(status_label_, colour::label, 0);
-
-    refresh_btn_ = lv_button_create(status_bar);
-    lv_obj_set_size(refresh_btn_, 120, 36);
-    lv_obj_set_style_bg_color(refresh_btn_, colour::accent, 0);
-    lv_obj_set_style_radius(refresh_btn_, 8, 0);
-    lv_obj_add_event_cb(refresh_btn_, refresh_trampoline, LV_EVENT_CLICKED, this);
-
-    auto* btn_label = lv_label_create(refresh_btn_);
-    lv_label_set_text(btn_label, "Refresh");
-    lv_obj_set_style_text_font(btn_label, &lv_font_montserrat_14, 0);
-    lv_obj_center(btn_label);
 }
 
 void Ui::update_measurements(const Sen55::Measurement& data)
@@ -183,9 +153,4 @@ void Ui::set_status(std::string_view text)
 {
     // lv_label_set_text copies internally, so the view is safe here
     lv_label_set_text(status_label_, std::string(text).c_str());
-}
-
-void Ui::on_refresh(RefreshCallback cb)
-{
-    refresh_cb_ = std::move(cb);
 }

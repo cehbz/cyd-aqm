@@ -59,8 +59,14 @@ esp_err_t Sen55::read_words(uint16_t cmd, uint16_t* words, size_t count)
     uint8_t rx[24]; // max 8 words × 3 bytes
     assert(rx_len <= sizeof(rx));
 
-    auto err = i2c_master_transmit_receive(dev_, cmd_buf.data(), cmd_buf.size(),
-                                           rx, rx_len, kI2cTimeoutMs);
+    // Sensirion sensors require a delay between command write and data read.
+    // A repeated-start (transmit_receive) is too fast; use separate transactions.
+    auto err = i2c_master_transmit(dev_, cmd_buf.data(), cmd_buf.size(), kI2cTimeoutMs);
+    if (err != ESP_OK) {
+        return err;
+    }
+    vTaskDelay(pdMS_TO_TICKS(kDelayCmdMs));
+    err = i2c_master_receive(dev_, rx, rx_len, kI2cTimeoutMs);
     if (err != ESP_OK) {
         return err;
     }
@@ -102,7 +108,6 @@ esp_err_t Sen55::stop_measurement()
 esp_err_t Sen55::read_data_ready(bool& ready)
 {
     uint16_t word{};
-    vTaskDelay(pdMS_TO_TICKS(kDelayCmdMs));
     auto err = read_words(kCmdReadDataReady, &word, 1);
     if (err == ESP_OK) {
         ready = (word & 0x01) != 0;
@@ -113,7 +118,6 @@ esp_err_t Sen55::read_data_ready(bool& ready)
 esp_err_t Sen55::read_measured_values(Measurement& out)
 {
     std::array<uint16_t, 8> words{};
-    vTaskDelay(pdMS_TO_TICKS(kDelayCmdMs));
     auto err = read_words(kCmdReadMeasuredValues, words.data(), words.size());
     if (err != ESP_OK) {
         return err;

@@ -35,7 +35,7 @@ public:
 
 private:
     static constexpr uint8_t kAddress = 0x69;
-    static constexpr uint32_t kI2cSpeedHz = 100'000;
+    static constexpr uint32_t kI2cSpeedHz = 10'000;
     static constexpr int kI2cTimeoutMs = 100;
 
     // I2C commands (big-endian 16-bit)
