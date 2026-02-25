@@ -1,20 +1,21 @@
-#include "display.hpp"
+#include "esp32_8048s043.hpp"
 
 #include "esp_check.h"
 #include "esp_log.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_rgb.h"
-#include "esp_lcd_touch_gt911.h"
 #include "esp_lvgl_port.h"
-#include "driver/i2c_master.h"
 #include "driver/gpio.h"
 
 #include <cstdint>
 
-namespace display {
+// ESP-IDF config structs have many fields we intentionally leave defaulted.
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+
+namespace esp32_8048s043 {
 namespace {
 
-const char* TAG = "display";
+const char* TAG = "esp32_8048s043";
 
 /* ── Pin assignments (ESP32-8048S043 board) ──────────────────────────── */
 
@@ -46,85 +47,9 @@ constexpr int kDataPins[] = {
     GPIO_NUM_14,  // R7
 };
 
-// GT911 touch (I2C_NUM_0)
-constexpr auto kPinTouchSda = GPIO_NUM_19;
-constexpr auto kPinTouchScl = GPIO_NUM_20;
-constexpr auto kPinTouchRst = GPIO_NUM_38;
-constexpr auto kPinTouchInt = GPIO_NUM_18;
-
 constexpr uint32_t kPixelClkHz = 18'000'000;
-constexpr uint32_t kTouchI2cClkHz = 400'000;
-
-/*
- * GT911 raw coordinate range on this board.
- * The touch firmware reports in its own coordinate space, not the panel
- * resolution.  Values determined empirically (limpens repo).
- */
-constexpr uint16_t kTouchRawXMax = 477;
-constexpr uint16_t kTouchRawYMax = 269;
-
-/* ── Helpers ─────────────────────────────────────────────────────────── */
-
-uint16_t MapRange(uint16_t val, uint16_t in_max, uint16_t out_max)
-{
-    return static_cast<uint16_t>(
-        static_cast<uint32_t>(val) * out_max / in_max);
-}
-
-void TouchProcessCoordinates(esp_lcd_touch_handle_t /*tp*/,
-                             uint16_t* x, uint16_t* y,
-                             uint16_t* /*strength*/,
-                             uint8_t* /*point_num*/,
-                             uint8_t /*max_point_num*/)
-{
-    *x = MapRange(*x, kTouchRawXMax, kHRes);
-    *y = MapRange(*y, kTouchRawYMax, kVRes);
-}
 
 /* ── Initialisation helpers ──────────────────────────────────────────── */
-
-esp_err_t InitTouch(esp_lcd_touch_handle_t& out_touch)
-{
-    const i2c_master_bus_config_t bus_cfg = {
-        .i2c_port = I2C_NUM_0,
-        .sda_io_num = kPinTouchSda,
-        .scl_io_num = kPinTouchScl,
-        .clk_source = I2C_CLK_SRC_DEFAULT,
-        .glitch_ignore_cnt = 7,
-        .flags = {.enable_internal_pullup = true},
-    };
-    i2c_master_bus_handle_t i2c_bus{};
-    ESP_RETURN_ON_ERROR(i2c_new_master_bus(&bus_cfg, &i2c_bus),
-                        TAG, "I2C bus init failed");
-
-    const esp_lcd_panel_io_i2c_config_t tp_io_cfg = {
-        .dev_addr = ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS,
-        .control_phase_bytes = 1,
-        .lcd_cmd_bits = 16,
-        .lcd_param_bits = 0,
-        .flags = {.disable_control_phase = 1},
-        .scl_speed_hz = kTouchI2cClkHz,
-    };
-    esp_lcd_panel_io_handle_t tp_io{};
-    ESP_RETURN_ON_ERROR(esp_lcd_new_panel_io_i2c(i2c_bus, &tp_io_cfg, &tp_io),
-                        TAG, "Touch panel IO init failed");
-
-    const esp_lcd_touch_config_t tp_cfg = {
-        .x_max = static_cast<uint16_t>(kHRes),
-        .y_max = static_cast<uint16_t>(kVRes),
-        .rst_gpio_num = kPinTouchRst,
-        .int_gpio_num = kPinTouchInt,
-        .levels = {.reset = 0, .interrupt = 0},
-        .flags = {.swap_xy = 0, .mirror_x = 0, .mirror_y = 0},
-        .process_coordinates = TouchProcessCoordinates,
-        .interrupt_callback = nullptr,
-    };
-    ESP_RETURN_ON_ERROR(esp_lcd_touch_new_i2c_gt911(tp_io, &tp_cfg, &out_touch),
-                        TAG, "GT911 init failed");
-
-    ESP_LOGI(TAG, "GT911 touch initialised");
-    return ESP_OK;
-}
 
 esp_err_t InitLcd(esp_lcd_panel_handle_t& out_panel)
 {
@@ -187,9 +112,6 @@ esp_err_t Init()
     esp_lcd_panel_handle_t lcd_panel{};
     ESP_RETURN_ON_ERROR(InitLcd(lcd_panel), TAG, "LCD init failed");
 
-    esp_lcd_touch_handle_t touch{};
-    ESP_RETURN_ON_ERROR(InitTouch(touch), TAG, "Touch init failed");
-
     const lvgl_port_cfg_t lvgl_cfg = ESP_LVGL_PORT_INIT_CONFIG();
     ESP_RETURN_ON_ERROR(lvgl_port_init(&lvgl_cfg), TAG, "LVGL port init failed");
 
@@ -220,18 +142,9 @@ esp_err_t Init()
         return ESP_FAIL;
     }
 
-    const lvgl_port_touch_cfg_t touch_cfg = {
-        .disp = disp,
-        .handle = touch,
-    };
-    if (!lvgl_port_add_touch(&touch_cfg)) {
-        ESP_LOGE(TAG, "Failed to add touch input to LVGL port");
-        return ESP_FAIL;
-    }
-
     BacklightOn();
     ESP_LOGI(TAG, "Display fully initialised");
     return ESP_OK;
 }
 
-} // namespace display
+} // namespace esp32_8048s043

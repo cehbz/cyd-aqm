@@ -1,4 +1,4 @@
-#include "display.hpp"
+#include "esp32_8048s043.hpp"
 #include "sen55.hpp"
 #include "ui.hpp"
 
@@ -18,7 +18,7 @@ constexpr auto kSen55Scl = GPIO_NUM_12;
 extern "C" void app_main()
 {
     // 1. Display + LVGL
-    ESP_ERROR_CHECK(display::Init());
+    ESP_ERROR_CHECK(esp32_8048s043::Init());
 
     // 2. SEN55 I2C bus
     const i2c_master_bus_config_t bus_cfg = {

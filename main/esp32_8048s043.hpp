@@ -4,15 +4,15 @@
 
 #include <cstdint>
 
-namespace display {
+namespace esp32_8048s043 {
 
 constexpr uint32_t kHRes = 800;
 constexpr uint32_t kVRes = 480;
 
 /**
- * Initialise the RGB LCD panel, GT911 touch, and LVGL port.
+ * Initialise the RGB LCD panel and LVGL port.
  * After this returns the LVGL task is running and the display is ready.
  */
 [[nodiscard]] esp_err_t Init();
 
-} // namespace display
+} // namespace esp32_8048s043

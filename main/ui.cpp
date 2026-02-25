@@ -1,5 +1,5 @@
 #include "ui.hpp"
-#include "display.hpp"
+#include "esp32_8048s043.hpp"
 
 #include <cstdio>
 #include <string>

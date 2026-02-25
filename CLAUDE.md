@@ -8,7 +8,6 @@ ESP-IDF firmware for an air quality monitor using an ESP32-8048S043 "CYD" and Se
 |-----------|--------|
 | Board | ESP32-8048S043 (ESP32-S3, 16MB flash, 8MB octal PSRAM) |
 | Display | 4.3" 800x480 RGB565, ST7262, 18 MHz pixel clock |
-| Touch | GT911 capacitive, I2C @ 0x5D, GPIO 19 (SDA) / 20 (SCL) / 38 (RST) / 18 (INT) |
 | Sensor | Sensirion SEN55, I2C @ 0x69, GPIO 11 (SDA) / 12 (SCL) via P2 header |
 | Sensor power | 5V from P1 5V pin, GND from P1 GND, SEL pin pulled to GND for I2C mode |
 | USB | USB-A to USB-C cable required (board's CC resistors don't support C-to-C) |
@@ -44,19 +43,19 @@ A wrapper at `~/.local/bin/idf.py` sources `export.sh` automatically, so `idf.py
 
 ```
 main/
-  main.cpp        – app_main (extern "C"), constructs Sen55 + Ui
-  display.hpp/cpp – display::Init() — RGB LCD panel + LVGL port + GT911 touch
-  ui.hpp/cpp      – Ui class: 8 measurement cards, status line
-  sen55.hpp/cpp   – Sen55 class: self-managing sensor (pimpl, owns polling task)
+  main.cpp                – app_main (extern "C"), constructs Sen55 + Ui
+  esp32_8048s043.hpp/cpp  – Board-specific RGB LCD + LVGL port init
+  ui.hpp/cpp              – Ui class: 8 measurement cards, status line
+  sen55.hpp/cpp           – Sen55 class: self-managing sensor (pimpl, owns polling task)
 ```
 
 ### Sensor
 
 Sen55 is a self-managing domain object. Construction starts measurement and spawns a polling task; destruction stops it. The only interface is a callback that fires with each new `Measurement`. All I2C protocol details are hidden behind pimpl. The header has no ESP-IDF dependencies.
 
-### Display
+### Display (esp32_8048s043)
 
-Uses `esp_lvgl_port` with a simple single-framebuffer configuration (no bounce buffer, no direct mode, no avoid-tearing). The GT911 `TouchProcessCoordinates` callback maps from the sensor's native coordinate space (0–477 × 0–269) to display resolution (800 × 480).
+Board-specific init for the ESP32-8048S043's 4.3" ST7262 RGB panel. Uses `esp_lvgl_port` with a simple single-framebuffer configuration (no bounce buffer, no direct mode, no avoid-tearing).
 
 ### LVGL fonts
 
@@ -66,7 +65,6 @@ Built-in Montserrat fonts lack µ (U+00B5) and ³ (U+00B3). Unit strings use ASC
 
 - `lvgl/lvgl ^9`
 - `espressif/esp_lvgl_port ^2.4`
-- `espressif/esp_lcd_touch_gt911 ^1.2`
 
 ## Conventions
 
