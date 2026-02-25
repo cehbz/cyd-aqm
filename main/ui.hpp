@@ -37,7 +37,6 @@ private:
     static constexpr int kStatusHeight = 28;
 
     Card make_card(lv_obj_t* parent, size_t index);
-    static lv_color_t pm25_color(float pm25);
 
     std::array<Card, kCardCount> cards_{};
     lv_obj_t* status_label_{};

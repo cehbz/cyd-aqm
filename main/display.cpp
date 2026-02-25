@@ -143,8 +143,8 @@ esp_err_t init_lcd(esp_lcd_panel_handle_t& out_panel)
             .flags = {.pclk_active_neg = true},
         },
         .data_width = 16,
-        .num_fbs = 2,
-        .bounce_buffer_size_px = kHRes * 10,
+        .num_fbs = 1,
+        .bounce_buffer_size_px = 0,
         .psram_trans_align = 64,
         .hsync_gpio_num = kPinHsync,
         .vsync_gpio_num = kPinVsync,
@@ -195,7 +195,7 @@ esp_err_t init()
 
     const lvgl_port_display_cfg_t disp_cfg = {
         .panel_handle = lcd_panel,
-        .buffer_size = kHRes * 100,
+        .buffer_size = kHRes * 10,
         .double_buffer = false,
         .hres = kHRes,
         .vres = kVRes,
@@ -205,13 +205,13 @@ esp_err_t init()
             .buff_dma = false,
             .buff_spiram = false,
             .swap_bytes = false,
-            .direct_mode = true,
+            .direct_mode = false,
         },
     };
     const lvgl_port_display_rgb_cfg_t rgb_cfg = {
         .flags = {
-            .bb_mode = true,
-            .avoid_tearing = true,
+            .bb_mode = false,
+            .avoid_tearing = false,
         },
     };
     auto* disp = lvgl_port_add_disp_rgb(&disp_cfg, &rgb_cfg);
