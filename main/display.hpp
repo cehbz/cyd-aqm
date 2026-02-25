@@ -13,6 +13,6 @@ constexpr uint32_t kVRes = 480;
  * Initialise the RGB LCD panel, GT911 touch, and LVGL port.
  * After this returns the LVGL task is running and the display is ready.
  */
-[[nodiscard]] esp_err_t init();
+[[nodiscard]] esp_err_t Init();
 
 } // namespace display

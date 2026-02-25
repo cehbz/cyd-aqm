@@ -65,25 +65,25 @@ constexpr uint16_t kTouchRawYMax = 269;
 
 /* ── Helpers ─────────────────────────────────────────────────────────── */
 
-uint16_t map_range(uint16_t val, uint16_t in_max, uint16_t out_max)
+uint16_t MapRange(uint16_t val, uint16_t in_max, uint16_t out_max)
 {
     return static_cast<uint16_t>(
         static_cast<uint32_t>(val) * out_max / in_max);
 }
 
-void touch_process_coordinates(esp_lcd_touch_handle_t /*tp*/,
-                               uint16_t* x, uint16_t* y,
-                               uint16_t* /*strength*/,
-                               uint8_t* /*point_num*/,
-                               uint8_t /*max_point_num*/)
+void TouchProcessCoordinates(esp_lcd_touch_handle_t /*tp*/,
+                             uint16_t* x, uint16_t* y,
+                             uint16_t* /*strength*/,
+                             uint8_t* /*point_num*/,
+                             uint8_t /*max_point_num*/)
 {
-    *x = map_range(*x, kTouchRawXMax, kHRes);
-    *y = map_range(*y, kTouchRawYMax, kVRes);
+    *x = MapRange(*x, kTouchRawXMax, kHRes);
+    *y = MapRange(*y, kTouchRawYMax, kVRes);
 }
 
 /* ── Initialisation helpers ──────────────────────────────────────────── */
 
-esp_err_t init_touch(esp_lcd_touch_handle_t& out_touch)
+esp_err_t InitTouch(esp_lcd_touch_handle_t& out_touch)
 {
     const i2c_master_bus_config_t bus_cfg = {
         .i2c_port = I2C_NUM_0,
@@ -116,7 +116,7 @@ esp_err_t init_touch(esp_lcd_touch_handle_t& out_touch)
         .int_gpio_num = kPinTouchInt,
         .levels = {.reset = 0, .interrupt = 0},
         .flags = {.swap_xy = 0, .mirror_x = 0, .mirror_y = 0},
-        .process_coordinates = touch_process_coordinates,
+        .process_coordinates = TouchProcessCoordinates,
         .interrupt_callback = nullptr,
     };
     ESP_RETURN_ON_ERROR(esp_lcd_touch_new_i2c_gt911(tp_io, &tp_cfg, &out_touch),
@@ -126,7 +126,7 @@ esp_err_t init_touch(esp_lcd_touch_handle_t& out_touch)
     return ESP_OK;
 }
 
-esp_err_t init_lcd(esp_lcd_panel_handle_t& out_panel)
+esp_err_t InitLcd(esp_lcd_panel_handle_t& out_panel)
 {
     const esp_lcd_rgb_panel_config_t panel_cfg = {
         .clk_src = LCD_CLK_SRC_DEFAULT,
@@ -169,7 +169,7 @@ esp_err_t init_lcd(esp_lcd_panel_handle_t& out_panel)
     return ESP_OK;
 }
 
-void backlight_on()
+void BacklightOn()
 {
     const gpio_config_t cfg = {
         .pin_bit_mask = 1ULL << kPinBacklight,
@@ -182,13 +182,13 @@ void backlight_on()
 
 } // anonymous namespace
 
-esp_err_t init()
+esp_err_t Init()
 {
     esp_lcd_panel_handle_t lcd_panel{};
-    ESP_RETURN_ON_ERROR(init_lcd(lcd_panel), TAG, "LCD init failed");
+    ESP_RETURN_ON_ERROR(InitLcd(lcd_panel), TAG, "LCD init failed");
 
     esp_lcd_touch_handle_t touch{};
-    ESP_RETURN_ON_ERROR(init_touch(touch), TAG, "Touch init failed");
+    ESP_RETURN_ON_ERROR(InitTouch(touch), TAG, "Touch init failed");
 
     const lvgl_port_cfg_t lvgl_cfg = ESP_LVGL_PORT_INIT_CONFIG();
     ESP_RETURN_ON_ERROR(lvgl_port_init(&lvgl_cfg), TAG, "LVGL port init failed");
@@ -229,7 +229,7 @@ esp_err_t init()
         return ESP_FAIL;
     }
 
-    backlight_on();
+    BacklightOn();
     ESP_LOGI(TAG, "Display fully initialised");
     return ESP_OK;
 }

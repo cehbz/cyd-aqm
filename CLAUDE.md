@@ -44,19 +44,19 @@ A wrapper at `~/.local/bin/idf.py` sources `export.sh` automatically, so `idf.py
 
 ```
 main/
-  main.cpp        – app_main (extern "C"), sensor task (1 Hz continuous read)
-  display.hpp/cpp – display::init() — RGB LCD panel + LVGL port + GT911 touch
+  main.cpp        – app_main (extern "C"), constructs Sen55 + Ui
+  display.hpp/cpp – display::Init() — RGB LCD panel + LVGL port + GT911 touch
   ui.hpp/cpp      – Ui class: 8 measurement cards, status line
-  sen55.hpp/cpp   – Sen55 class: I2C driver with CRC8 verification
+  sen55.hpp/cpp   – Sen55 class: self-managing sensor (pimpl, owns polling task)
 ```
 
-### Sensor operation
+### Sensor
 
-The SEN55 runs in continuous measurement mode (started once at boot, never stopped). The sensor task polls data-ready and reads values at 1 Hz. This allows VOC and NOx indices to condition properly (~60 s for initial readings, ~24 h for full baseline). The fan and sensor are rated for 10+ years continuous operation.
+Sen55 is a self-managing domain object. Construction starts measurement and spawns a polling task; destruction stops it. The only interface is a callback that fires with each new `Measurement`. All I2C protocol details are hidden behind pimpl. The header has no ESP-IDF dependencies.
 
 ### Display
 
-Uses `esp_lvgl_port` to manage the LVGL task, display registration (double framebuffer + bounce buffer in PSRAM, direct mode, avoid-tearing), and touch input. The GT911 `process_coordinates` callback maps from the sensor's native coordinate space (0–477 × 0–269) to display resolution (800 × 480).
+Uses `esp_lvgl_port` with a simple single-framebuffer configuration (no bounce buffer, no direct mode, no avoid-tearing). The GT911 `TouchProcessCoordinates` callback maps from the sensor's native coordinate space (0–477 × 0–269) to display resolution (800 × 480).
 
 ### LVGL fonts
 
@@ -70,11 +70,9 @@ Built-in Montserrat fonts lack µ (U+00B5) and ³ (U+00B3). Unit strings use ASC
 
 ## Conventions
 
-- C++ (gnu++2b), modern idioms: classes, constexpr, std::array, std::string_view, RAII
+- Follow the [Google C++ Style Guide](https://google.github.io/styleguide/cppguide.html) with these project-specific exceptions:
+  - File extensions: `.hpp` / `.cpp` (not `.h` / `.cc`)
+- C++ (gnu++2b), modern idioms: classes, constexpr, std::array, std::string_view, std::function, RAII, pimpl
 - ESP-IDF C APIs wrapped in C++ classes/namespaces; `app_main` is `extern "C"`
 - All LVGL calls must be wrapped in `lvgl_port_lock(0)` / `lvgl_port_unlock()`
-- SEN55 driver uses the new `i2c_master` API (not the legacy `driver/i2c.h`)
-- I2C reads use separate write → 20 ms delay → read (not `i2c_master_transmit_receive`)
-- Constants use `constexpr` with `kCamelCase` naming
 - No exceptions; error handling via `esp_err_t` returns
-- Headers use `.hpp` extension; sources use `.cpp`
