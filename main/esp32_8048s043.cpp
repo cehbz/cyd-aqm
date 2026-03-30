@@ -28,7 +28,7 @@ constexpr auto kPinDE = GPIO_NUM_40;
 constexpr auto kPinPclk = GPIO_NUM_42;
 
 // RGB LCD 16-bit data bus (B5, G6, R5)
-constexpr int kDataPins[] = {
+constexpr gpio_num_t kDataPins[] = {
     GPIO_NUM_8,   // B3
     GPIO_NUM_3,   // B4
     GPIO_NUM_46,  // B5
@@ -70,7 +70,6 @@ esp_err_t InitLcd(esp_lcd_panel_handle_t& out_panel)
         .data_width = 16,
         .num_fbs = 1,
         .bounce_buffer_size_px = 0,
-        .psram_trans_align = 64,
         .hsync_gpio_num = kPinHsync,
         .vsync_gpio_num = kPinVsync,
         .de_gpio_num = kPinDE,

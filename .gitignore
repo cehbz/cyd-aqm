@@ -14,7 +14,11 @@ sdkconfig.old
 # Claude Code local settings
 .claude/
 
+# Secrets
+main/credentials.h
+
 # Local dev environment
 .direnv/
 .envrc
 .python-version
+.cache/

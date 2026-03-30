@@ -28,25 +28,28 @@ ESP-IDF firmware for an air quality monitor using an ESP32-8048S043 "CYD" and Se
 
 ## Build
 
-Requires ESP-IDF v5.4. The `.envrc` configures the Python venv via `layout python3` and sources ESP-IDF via direnv.
+Requires ESP-IDF v6.0 at `~/.espressif/v6.0/esp-idf`. A wrapper at `~/.local/bin/idf.py` sources `export.sh` automatically.
 
 ```sh
-direnv allow
-idf.py set-target esp32s3
 idf.py build
-idf.py flash monitor
+idf.py -p <PORT> flash monitor
 ```
 
-A wrapper at `~/.local/bin/idf.py` sources `export.sh` automatically, so `idf.py build` works directly in any shell (including Claude Code's Bash tool).
+**Flashing**: The CH340C on the USB-C port is wired to UART0 (confirmed). USB-A to USB-C cable required (board lacks CC resistors for C-to-C). See `debugging.md` for current flashing issues.
 
 ## Architecture
 
 ```
 main/
-  main.cpp                – app_main (extern "C"), constructs Sen55 + Ui
+  main.cpp                – app_main: display + sensor + WiFi + MQTT + SEN55 publishing
   esp32_8048s043.hpp/cpp  – Board-specific RGB LCD + LVGL port init
   ui.hpp/cpp              – Ui class: 8 measurement cards, status line
   sen55.hpp/cpp           – Sen55 class: self-managing sensor (pimpl, owns polling task)
+  device_id.hpp/cpp       – MAC-derived unique device ID
+  wifi.hpp/cpp            – WiFi STA with auto-reconnect
+  mqtt.hpp/cpp            – esp-mqtt client, LWT, publish/subscribe
+  ha_discovery.hpp/cpp    – HA MQTT Discovery payloads for SEN55 (8 entities)
+  credentials.h.template  – WiFi SSID/pass, MQTT broker URI (copy to credentials.h)
 ```
 
 ### Sensor
@@ -65,6 +68,8 @@ Built-in Montserrat fonts lack µ (U+00B5) and ³ (U+00B3). Unit strings use ASC
 
 - `lvgl/lvgl ^9`
 - `espressif/esp_lvgl_port ^2.4`
+- `espressif/mqtt *`
+- `espressif/cjson *`
 
 ## Conventions
 

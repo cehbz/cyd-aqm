@@ -136,11 +136,10 @@ Sen55::Sen55(void* i2c_bus, Callback cb)
 {
     impl_->cb = std::move(cb);
 
-    const i2c_device_config_t cfg = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = Impl::kAddress,
-        .scl_speed_hz = Impl::kI2cSpeedHz,
-    };
+    i2c_device_config_t cfg{};
+    cfg.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+    cfg.device_address = Impl::kAddress;
+    cfg.scl_speed_hz = Impl::kI2cSpeedHz;
     ESP_ERROR_CHECK(i2c_master_bus_add_device(
         static_cast<i2c_master_bus_handle_t>(i2c_bus), &cfg, &impl_->dev));
     ESP_ERROR_CHECK(impl_->SendCommand(Impl::kCmdStartMeasurement));
